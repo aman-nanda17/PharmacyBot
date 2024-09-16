@@ -1,0 +1,6 @@
+node_modules/
+.env
+userbot_error.log
+admin_error.log
+session_db.json
+admin_session_db.json

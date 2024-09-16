@@ -1,0 +1,21 @@
+{
+  "name": "pharmacy_bot",
+  "version": "1.0.0",
+  "description": "some description",
+  "main": "bot.js",
+  "scripts": {
+    "start": "concurrently -n UserBot,AdminBot \"node bot.js\" \"node admin.js\""
+  },
+  "author": "Aman Nanda",
+  "license": "ISC",
+  "dependencies": {
+    "concurrently": "^9.0.1",
+    "dotenv": "^16.4.5",
+    "mysql": "^2.18.1",
+    "mysql2": "^3.11.0",
+    "nodemon": "^3.1.4",
+    "telegraf": "^4.16.3",
+    "telegraf-session-local": "^2.1.1",
+    "telegram-keyboard": "^2.3.5"
+  }
+}
