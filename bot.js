@@ -2,12 +2,12 @@
   const fs = require('fs');
   // Global error handling to log errors into a file
   process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    console.error('UserBot: Unhandled Rejection at:', promise, 'reason:', reason);
     fs.appendFileSync('userbot_error.log', `Unhandled Rejection: ${reason}\n`);
   });
 
   process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
+    console.error('UserBot: Uncaught Exception:', err);
     fs.appendFileSync('userbot_error.log', `Uncaught Exception: ${err}\n`);
   });
 
@@ -276,12 +276,12 @@
         connection.query('SELECT id FROM users WHERE telegram_id = ?', [userId], (err,userResults) => {
 
             if (err) {
-                console.error('Database query error:', err);
+                console.error('UserBot: Database query error:', err);
                 ctx.reply('A database error occurred. Please try again later.');
                 return;
             }
         
-            console.log('Query Result for userId:', userId, 'Results:', userResults); // Debugging line
+            console.log('UserBot: Query Result for userId:', userId, 'Results:', userResults); // Debugging line
         
             if (userResults.length === 0) {
                 ctx.reply('Error: User not found in the database.');
@@ -306,7 +306,7 @@
                     );
 
                     // Log the user_id to verify that the correct user is being assigned
-                    console.log(`Vehicle assigned to user_id: ${userId}`);
+                    console.log(`UserBot: Vehicle assigned to user_id: ${userId}`);
 
                     ctx.reply(`Vehicle ${vehicleName} assigned to ${destination} with employee ${username} at ${currentTime}.`, mainKeyboard);
                     ctx.session.vehicleName = null; // Clear the session data
@@ -316,10 +316,10 @@
                     const adminId = process.env.ADMIN_TELEGRAM_ID;
                     adminBot.telegram.sendMessage(adminId, `🚗 User ${ctx.from.username || ctx.from.id} has assigned the vehicle "${vehicleName}" to themselves at ${currentTime}.\n\nEmployee: ${username}\nDestination: ${destination}`)
                         .then(() => {
-                            console.log(`Acknowledgment sent to admin_id: ${adminId}`);
+                            console.log(`UserBot: Acknowledgment sent to admin_id: ${adminId}`);
                         })
                         .catch((sendErr) => {
-                            console.error(`Failed to send acknowledgment to the admin. Error: ${sendErr.message}`);
+                            console.error(`UserBot: Failed to send acknowledgment to the admin. Error: ${sendErr.message}`);
                         });
                 }
             );
@@ -341,19 +341,4 @@
     }
   });
 
-  // Bind to a port to satisfy Render's requirement
-  const express = require('express');
-  const app = express();
-
-  const PORT = process.env.PORT || 3000;
-  
-  app.get('/', (req, res) => {
-    res.send('User Bot is running');
-  });
-
-  app.listen(PORT, () => {
-    console.log(`User Bot server is running on port ${PORT}`);
-  });
-
-  // Launch the bot
-  bot.launch();
+  module.exports = bot; // Export the bot so it can be used in index.js

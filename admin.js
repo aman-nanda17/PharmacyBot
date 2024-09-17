@@ -2,12 +2,12 @@
     const fs = require('fs');
     // Global error handling to log errors into a file
     process.on('unhandledRejection', (reason, promise) => {
-        console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+        console.error('AdminBot: Unhandled Rejection at:', promise, 'reason:', reason);
         fs.appendFileSync('admin_error.log', `Unhandled Rejection: ${reason}\n`);
     });
 
     process.on('uncaughtException', (err) => {
-        console.error('Uncaught Exception:', err);
+        console.error('AdminBot: Uncaught Exception:', err);
         fs.appendFileSync('admin_error.log', `Uncaught Exception: ${err}\n`);
     });
 
@@ -122,7 +122,7 @@
             [vehicleName],
             (err, results) => {
                 if (err) {
-                    console.error('Error fetching vehicle data:', err);
+                    console.error('AdminBot: Error fetching vehicle data:', err);
                     ctx.reply('An error occurred while fetching vehicle data. Please try again.');
                     return;
                 }
@@ -137,7 +137,7 @@
                 // Retrieve the user's telegram_id from the users table
                 connection.query('SELECT telegram_id FROM users WHERE id = ?', [user_id], (err, userResults) => {
                     if (err) {
-                        console.error('Database query error:', err);
+                        console.error('AdminBot: Database query error:', err);
                         ctx.reply('A database error occurred. Please try again later.');
                         return;
                     }
@@ -167,10 +167,10 @@
                         [now, totalTime, user_id, vehicleName, assigned_at],
                         (err) => {
                             if (err) {
-                                console.error('Error updating journey data:', err);
+                                console.error('AdminBot: Error updating journey data:', err);
                                 ctx.reply('An error occurred while updating the journey details. Please try again.');
                             } else {
-                                console.log('Journey details updated successfully.');
+                                console.log('AdminBot: Journey details updated successfully.');
     
                                 // Update the vehicle's status back to 'pharmacy'
                                 connection.query(
@@ -178,7 +178,7 @@
                                     [vehicleName],
                                     (err, updateResults) => {
                                         if (err) {
-                                            console.error('Error updating vehicle status:', err);
+                                            console.error('AdminBot: Error updating vehicle status:', err);
                                             ctx.reply('An error occurred while returning the vehicle. Please try again.');
                                             return;
                                         }
@@ -189,10 +189,10 @@
                                             // Attempt to send acknowledgment to the user
                                             userBot.telegram.sendMessage(userTelegramId, `🚗 Your vehicle "${vehicleName}" has been successfully returned to the pharmacy by the admin at ${returnTime}.\n\nEmployee: ${current_employee}\nDestination: ${current_destination}\nTime spent: ${hours} hours, ${minutes} minutes, ${seconds} seconds`)
                                                 .then(() => {
-                                                    console.log(`Acknowledgment sent to user_id: ${userTelegramId}`);
+                                                    console.log(`AdminBot: Acknowledgment sent to user_id: ${userTelegramId}`);
                                                 })
                                                 .catch((sendErr) => {
-                                                    console.error(`Failed to send acknowledgment to the user. Error: ${sendErr.message}`);
+                                                    console.error(`AdminBot: Failed to send acknowledgment to the user. Error: ${sendErr.message}`);
                                                     ctx.reply('Failed to send acknowledgment to the user.');
                                                 });
                                         } else {
@@ -247,7 +247,7 @@
         // Fetch users who do not have a vehicle assigned
         connection.query('SELECT name, telegram_id FROM users WHERE name NOT IN (SELECT current_employee FROM vehicles WHERE status = "in_use")', (err, users) => {
             if (err) {
-                console.error('Error querying users:', err);
+                console.error('AdminBot: Error querying users:', err);
                 ctx.reply('An error occurred while retrieving users. Please try again.', adminKeyboard);
                 return;
             }
@@ -277,7 +277,7 @@
         // First, check if the user already has a vehicle assigned
         connection.query('SELECT * FROM vehicles WHERE user_id = ? AND status = "in_use"', [userTelegramId], (err, results) => {
             if (err) {
-                console.error('Error querying vehicle data:', err);
+                console.error('AdminBot: Error querying vehicle data:', err);
                 ctx.reply('An error occurred while checking the user’s vehicle assignment. Please try again.');
                 return;
             }
@@ -295,7 +295,7 @@
                     [vehicleName],
                     (err, updateResults) => {
                         if (err) {
-                            console.error('Error updating vehicle status:', err);
+                            console.error('AdminBot: Error updating vehicle status:', err);
                             ctx.reply('An error occurred while returning the vehicle to the pharmacy. Please try again.');
                             return;
                         }
@@ -356,12 +356,12 @@
         connection.query('SELECT id FROM users WHERE telegram_id = ?', [userTelegramId], (err, userResults) => {
 
             if (err) {
-                console.error('Database query error:', err);
+                console.error('AdminBot: Database query error:', err);
                 ctx.reply('A database error occurred. Please try again later.');
                 return;
             }
         
-            console.log('Query Result for userId:', userTelegramId, 'Results:', userResults); // Debugging line
+            console.log('AdminBot: Query Result for userId:', userTelegramId, 'Results:', userResults); // Debugging line
         
             if (userResults.length === 0) {
                 ctx.reply('Error: User not found in the database.');
@@ -375,7 +375,7 @@
                 [employeeName, userIdFromDB, destinationName, now, vehicleName],
                 (err, updateResults) => {
                     if (err) {
-                        console.error('Error updating vehicle assignment:', err);
+                        console.error('AdminBot: Error updating vehicle assignment:', err);
                         ctx.reply('An error occurred while assigning the vehicle. Please try again.', adminKeyboard);
                         return;
                     }
@@ -396,10 +396,10 @@
                         if (userTelegramId) {
                             userBot.telegram.sendMessage(userTelegramId, `🚗 You have been assigned the vehicle "${vehicleName}" for the destination "${destinationName}". \n\nAssigned at: ${currentTime}`)
                                 .then(() => {
-                                    console.log(`Notification sent to user with Telegram ID: ${userTelegramId}`);
+                                    console.log(`AdminBot: Notification sent to user with Telegram ID: ${userTelegramId}`);
                                 })
                                 .catch((sendErr) => {
-                                    console.error(`Failed to send notification to the user. Error: ${sendErr.message}`);
+                                    console.error(`AdminBot: Failed to send notification to the user. Error: ${sendErr.message}`);
                                     ctx.reply('Failed to send notification to the user.', adminKeyboard);
                                 });
                         }
@@ -535,19 +535,4 @@
         }
     });
 
-    // Bind to a port to satisfy Render's requirement
-    const express = require('express');
-    const app = express();
-
-    const PORT = process.env.PORT || 3001;
-
-    app.get('/', (req, res) => {
-    res.send('Admin Bot is running');
-    });
-    
-    app.listen(PORT, () => {
-    console.log(`Admin Bot server is running on port ${PORT}`);
-    });
-
-    // Launch the admin bot
-    adminBot.launch();
+    module.exports = adminBot; // Export the admin bot so it can be used in index.js
