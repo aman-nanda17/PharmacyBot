@@ -341,5 +341,19 @@
     }
   });
 
+  // Bind to a port to satisfy Render's requirement
+  const express = require('express');
+  const app = express();
+
+  const PORT = process.env.PORT || 3000;
+  
+  app.get('/', (req, res) => {
+    res.send('User Bot is running');
+  });
+
+  app.listen(PORT, () => {
+    console.log(`User Bot server is running on port ${PORT}`);
+  });
+
   // Launch the bot
   bot.launch();
