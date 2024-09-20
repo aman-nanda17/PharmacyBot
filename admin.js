@@ -13,7 +13,7 @@
 
     const { Telegraf, Markup } = require('telegraf');
     const LocalSession = require('telegraf-session-local');
-    const connection = require('./database');
+    const pool = require('./database');
     const { Keyboard } = require('telegram-keyboard');
 
     const adminBot = new Telegraf(process.env.ADMIN_BOT_TOKEN);
@@ -58,7 +58,7 @@
                 name;
         `;
         
-        connection.query(query, (err, results) => {
+        pool.query(query, (err, results) => {
             if (err) throw err;
 
             let message = '<b>Vehicle Status:</b>\n\n';
@@ -94,7 +94,7 @@
 
     // Handle return command and button
     const handleReturn = (ctx) => {
-        connection.query('SELECT name, current_employee FROM vehicles WHERE status = "in_use"', (err, results) => {
+        pool.query('SELECT name, current_employee FROM vehicles WHERE status = "in_use"', (err, results) => {
             if (err) throw err;
 
             if (results.length === 0) {
@@ -117,7 +117,7 @@
         const vehicleName = ctx.match[1].trim();
     
         // Fetch the user_id, assigned_at, and other details for the vehicle
-        connection.query(
+        pool.query(
             'SELECT user_id, current_employee, current_destination, assigned_at FROM vehicles WHERE name = ?',
             [vehicleName],
             (err, results) => {
@@ -135,7 +135,7 @@
                 const { user_id, current_employee, current_destination, assigned_at } = results[0];
     
                 // Retrieve the user's telegram_id from the users table
-                connection.query('SELECT telegram_id FROM users WHERE id = ?', [user_id], (err, userResults) => {
+                pool.query('SELECT telegram_id FROM users WHERE id = ?', [user_id], (err, userResults) => {
                     if (err) {
                         console.error('AdminBot: Database query error:', err);
                         ctx.reply('A database error occurred. Please try again later.');
@@ -162,7 +162,7 @@
                     const returnTime = now.toLocaleString(); // Capture the current return time
     
                     // Update the journey details in the journeys table
-                    connection.query(
+                    pool.query(
                         'UPDATE journeys SET returned_at = ?, total_time = ? WHERE user_id = ? AND vehicle_name = ? AND assigned_at = ?',
                         [now, totalTime, user_id, vehicleName, assigned_at],
                         (err) => {
@@ -173,7 +173,7 @@
                                 console.log('AdminBot: Journey details updated successfully.');
     
                                 // Update the vehicle's status back to 'pharmacy'
-                                connection.query(
+                                pool.query(
                                     'UPDATE vehicles SET status = "pharmacy", current_destination = NULL, current_employee = NULL, user_id = NULL, assigned_at = NULL, returned_at = NULL WHERE name = ?',
                                     [vehicleName],
                                     (err, updateResults) => {
@@ -211,7 +211,7 @@
     // Handle assign command and button
     const handleAssign = (ctx) => {
         // Fetch available vehicles
-        connection.query('SELECT name FROM vehicles WHERE status = "pharmacy"', (err, vehicles) => {
+        pool.query('SELECT name FROM vehicles WHERE status = "pharmacy"', (err, vehicles) => {
             if (err) throw err;
     
             const vehicleNames = vehicles.map(vehicle => vehicle.name);
@@ -245,7 +245,7 @@
         ctx.session.vehicleName = vehicleName;
     
         // Fetch users who do not have a vehicle assigned
-        connection.query('SELECT name, telegram_id FROM users WHERE name NOT IN (SELECT current_employee FROM vehicles WHERE status = "in_use")', (err, users) => {
+        pool.query('SELECT name, telegram_id FROM users WHERE name NOT IN (SELECT current_employee FROM vehicles WHERE status = "in_use")', (err, users) => {
             if (err) {
                 console.error('AdminBot: Error querying users:', err);
                 ctx.reply('An error occurred while retrieving users. Please try again.', adminKeyboard);
@@ -275,7 +275,7 @@
         const userTelegramId = ctx.match[2];  // Extracted Telegram ID
     
         // First, check if the user already has a vehicle assigned
-        connection.query('SELECT * FROM vehicles WHERE user_id = ? AND status = "in_use"', [userTelegramId], (err, results) => {
+        pool.query('SELECT * FROM vehicles WHERE user_id = ? AND status = "in_use"', [userTelegramId], (err, results) => {
             if (err) {
                 console.error('AdminBot: Error querying vehicle data:', err);
                 ctx.reply('An error occurred while checking the user’s vehicle assignment. Please try again.');
@@ -290,7 +290,7 @@
                 const vehicleName = ctx.session.vehicleName;
     
                 // Update the vehicle status back to 'pharmacy'
-                connection.query(
+                pool.query(
                     'UPDATE vehicles SET status = "pharmacy", current_employee = NULL, user_id = NULL, assigned_at = NULL, returned_at = NULL WHERE name = ?',
                     [vehicleName],
                     (err, updateResults) => {
@@ -315,7 +315,7 @@
             ctx.session.userTelegramId = userTelegramId === 'null' ? null : userTelegramId; 
     
             // Proceed to destination selection...
-            connection.query('SELECT name FROM destinations WHERE name NOT IN (SELECT current_destination FROM vehicles WHERE status = "in_use")', (err, destinations) => {
+            pool.query('SELECT name FROM destinations WHERE name NOT IN (SELECT current_destination FROM vehicles WHERE status = "in_use")', (err, destinations) => {
                 if (err) throw err;
     
                 // Arrange destination buttons in two columns
@@ -353,7 +353,7 @@
         const now = new Date();
         const currentTime = now.toLocaleString(); // Capture the current time
 
-        connection.query('SELECT id FROM users WHERE telegram_id = ?', [userTelegramId], (err, userResults) => {
+        pool.query('SELECT id FROM users WHERE telegram_id = ?', [userTelegramId], (err, userResults) => {
 
             if (err) {
                 console.error('AdminBot: Database query error:', err);
@@ -370,7 +370,7 @@
 
             const userIdFromDB = userResults[0].id;
 
-            connection.query(
+            pool.query(
                 'UPDATE vehicles SET status = "in_use", current_employee = ?, user_id = ?, current_destination = ?, assigned_at = ? WHERE name = ?',
                 [employeeName, userIdFromDB, destinationName, now, vehicleName],
                 (err, updateResults) => {
@@ -384,7 +384,7 @@
                         ctx.reply(`🚗Vehicle ${vehicleName} assigned to ${destinationName} with employee ${employeeName} at ${currentTime}.`);
 
                         // Log the journey
-                        connection.query(
+                        pool.query(
                             'INSERT INTO journeys (user_id, vehicle_name, destination, assigned_at) VALUES (?, ?, ?, ?)',
                             [userIdFromDB, vehicleName, destinationName, now],
                             (err) => {
@@ -421,7 +421,7 @@
 
     // New Journey Details feature for Admin
     const handleJourneyDetails = (ctx) => {
-        connection.query('SELECT name, telegram_id FROM users', (err, users) => {
+        pool.query('SELECT name, telegram_id FROM users', (err, users) => {
             if (err) throw err;
     
             if (users.length === 0) {
@@ -454,7 +454,7 @@
     const telegramId = ctx.match[1];
 
         // First, get the user_id from the telegram_id
-        connection.query('SELECT id FROM users WHERE telegram_id = ?', [telegramId], (err, userResults) => {
+        pool.query('SELECT id FROM users WHERE telegram_id = ?', [telegramId], (err, userResults) => {
             if (err) throw err;
 
             if (userResults.length === 0) {
@@ -486,7 +486,7 @@
         targetDate.setDate(targetDate.getDate() - parseInt(dayOffset));
 
         // Fetch journey details for the selected date
-        connection.query(
+        pool.query(
             `SELECT vehicle_name, destination, assigned_at, returned_at, total_time 
             FROM journeys
             WHERE user_id = ? AND DATE(assigned_at) = DATE(?)`,

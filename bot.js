@@ -13,7 +13,7 @@
 
   const { Telegraf, Markup } = require('telegraf');
   const LocalSession = require('telegraf-session-local');
-  const connection = require('./database');
+  const pool = require('./database');
   const { Keyboard } = require('telegram-keyboard');
 
   const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
@@ -69,7 +69,7 @@
             name;
     `;
     
-    connection.query(query, (err, results) => {
+    pool.query(query, (err, results) => {
         if (err) throw err;
 
         let message = '<b>Vehicle Status:</b>\n\n';
@@ -108,7 +108,7 @@
         const userId = ctx.from.id;
 
         // Authenticate user
-        connection.query('SELECT id FROM users WHERE telegram_id = ?', [userId], (err, userResults) => {
+        pool.query('SELECT id FROM users WHERE telegram_id = ?', [userId], (err, userResults) => {
             if (err) throw err;
 
             if (userResults.length === 0) {
@@ -140,7 +140,7 @@
         targetDate.setDate(targetDate.getDate() - parseInt(dayOffset));
 
         // Fetch journey details for the selected date
-        connection.query(
+        pool.query(
             `SELECT vehicle_name, destination, assigned_at, returned_at, total_time 
             FROM journeys
             WHERE user_id = ? AND DATE(assigned_at) = DATE(?)`,
@@ -184,7 +184,7 @@
         const userId = ctx.from.id;
 
         // Fetch the user ID from the database
-        connection.query('SELECT id, name FROM users WHERE telegram_id = ?', [userId], (err, userResults) => {
+        pool.query('SELECT id, name FROM users WHERE telegram_id = ?', [userId], (err, userResults) => {
             if (err) throw err;
 
             if (userResults.length === 0) {
@@ -196,7 +196,7 @@
             const username = userResults[0].name;
 
             // Check if the user already has an assigned vehicle
-            connection.query('SELECT * FROM vehicles WHERE user_id = ?', [userIdFromDB], (err, results) => {
+            pool.query('SELECT * FROM vehicles WHERE user_id = ?', [userIdFromDB], (err, results) => {
                 if (err) throw err;
 
                 if (results.length > 0) {
@@ -209,7 +209,7 @@
                 ctx.session.username = username;
 
                 // Fetch available vehicles
-                connection.query('SELECT name FROM vehicles WHERE status = "pharmacy"', (err, vehicles) => {
+                pool.query('SELECT name FROM vehicles WHERE status = "pharmacy"', (err, vehicles) => {
                     if (err) throw err;
 
                     const vehicleNames = vehicles.map(vehicle => vehicle.name);
@@ -246,7 +246,7 @@
         const { username } = ctx.session;
 
         // Fetch predefined destinations not assigned to any vehicle
-        connection.query('SELECT name FROM destinations WHERE name NOT IN (SELECT current_destination FROM vehicles WHERE status = "in_use")', (err, destinations) => {
+        pool.query('SELECT name FROM destinations WHERE name NOT IN (SELECT current_destination FROM vehicles WHERE status = "in_use")', (err, destinations) => {
             if (err) throw err;
 
             // Arrange destination buttons in two columns
@@ -273,7 +273,7 @@
         const now = new Date();
         const currentTime = now.toLocaleString(); // Capture the current time
         
-        connection.query('SELECT id FROM users WHERE telegram_id = ?', [userId], (err,userResults) => {
+        pool.query('SELECT id FROM users WHERE telegram_id = ?', [userId], (err,userResults) => {
 
             if (err) {
                 console.error('UserBot: Database query error:', err);
@@ -290,14 +290,14 @@
 
             const userIdFromDB = userResults[0].id;
             // Update the vehicle's status, destination, employee, and user_id
-            connection.query(
+            pool.query(
                 'UPDATE vehicles SET status = ?, current_destination = ?, current_employee = ?, user_id = ?, assigned_at = NOW() WHERE name = ?',
                 ['in_use', destination, username, userIdFromDB, vehicleName],
                 (err) => {
                     if (err) throw err;
 
                     // Log the journey
-                    connection.query(
+                    pool.query(
                         'INSERT INTO journeys (user_id, vehicle_name, destination, assigned_at) VALUES (?, ?, ?, NOW())',
                         [userIdFromDB, vehicleName, destination],
                         (err) => {
