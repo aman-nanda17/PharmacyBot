@@ -1,5 +1,11 @@
   require('dotenv').config();
   const fs = require('fs');
+  const moment = require('moment-timezone');
+  const { Telegraf, Markup } = require('telegraf');
+  const LocalSession = require('telegraf-session-local');
+  const pool = require('./database');
+  const { Keyboard } = require('telegram-keyboard');
+
   // Global error handling to log errors into a file
   process.on('unhandledRejection', (reason, promise) => {
     console.error('UserBot: Unhandled Rejection at:', promise, 'reason:', reason);
@@ -10,11 +16,6 @@
     console.error('UserBot: Uncaught Exception:', err);
     fs.appendFileSync('userbot_error.log', `Uncaught Exception: ${err}\n`);
   });
-
-  const { Telegraf, Markup } = require('telegraf');
-  const LocalSession = require('telegraf-session-local');
-  const pool = require('./database');
-  const { Keyboard } = require('telegram-keyboard');
 
   const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
@@ -81,7 +82,7 @@
             const vehicleName = vehicle.name.padEnd(15, ' ');
             const destination = (vehicle.current_destination || 'pharmacy').padEnd(20, ' ');
             const user = (vehicle.current_employee || 'Available').padEnd(10, ' ');
-            const assignedAt = vehicle.assigned_at ? new Date(vehicle.assigned_at).toLocaleString() : 'N/A';
+            const assignedAt = vehicle.assigned_at ? moment(vehicle.assigned_at).tz('Asia/Kolkata').format('M/D/YYYY, h:mm:ss A') : 'N/A';
 
             if (vehicle.status !== 'pharmacy') {
                 // Highlight the row in uppercase if the vehicle is not in the pharmacy
@@ -136,14 +137,13 @@
         const [user_id, dayOffset] = ctx.match.slice(1);
 
         // Calculate the date based on the offset (0 = Today, 1 = Yesterday, 2 = Day before Yesterday)
-        const targetDate = new Date();
-        targetDate.setDate(targetDate.getDate() - parseInt(dayOffset));
+        const targetDate = moment().subtract(parseInt(dayOffset), 'days').format('YYYY-MM-DD');
 
         // Fetch journey details for the selected date
         pool.query(
             `SELECT vehicle_name, destination, assigned_at, returned_at, total_time 
             FROM journeys
-            WHERE user_id = ? AND DATE(assigned_at) = DATE(?)`,
+            WHERE user_id = ? AND DATE(assigned_at) = ?`,
             [user_id, targetDate],
             (err, journeyResults) => {
                 if (err) throw err;
@@ -153,7 +153,7 @@
                     return;
                 }
 
-                let message = `<b>Your Journey Details for ${targetDate.toDateString()}:</b>\n\n`;
+                let message = `<b>Your Journey Details for ${targetDate}:</b>\n\n`;
                 message += '<pre>';
                 message += 'Vehicle       | Destination       | Assigned At          | Returned At          | Total Time\n';
                 message += '------------------------------------------------------------------------------------------------\n';
@@ -161,8 +161,8 @@
                 journeyResults.forEach(journey => {
                     const vehicleName = journey.vehicle_name.padEnd(13, ' ');
                     const destination = (journey.destination || 'N/A').padEnd(17, ' ');
-                    const assignedAt = journey.assigned_at ? new Date(journey.assigned_at).toLocaleString() : 'N/A';
-                    const returnedAt = journey.returned_at ? new Date(journey.returned_at).toLocaleString() : 'In Progress';
+                    const assignedAt = journey.assigned_at ? moment(journey.assigned_at).tz('Asia/Kolkata').format('M/D/YYYY, h:mm:ss A') : 'N/A';
+                    const returnedAt = journey.returned_at ? moment(journey.returned_at).tz('Asia/Kolkata').format('M/D/YYYY, h:mm:ss A') : 'In Progress';
                     const totalTime = journey.total_time || 'N/A';
 
                     message += `${vehicleName} | ${destination} | ${assignedAt} | ${returnedAt} | ${totalTime}\n`;
@@ -270,9 +270,8 @@
         const { vehicleName, username } = ctx.session;
         const userId = ctx.from.id;
 
-        const now = new Date();
-        const currentTime = now.toLocaleString(); // Capture the current time
-        
+        const now = moment().tz('Asia/Kolkata').format('M/D/YYYY, h:mm:ss A'); // Capture the current time in the correct timezone
+    
         pool.query('SELECT id FROM users WHERE telegram_id = ?', [userId], (err,userResults) => {
 
             if (err) {
@@ -308,13 +307,13 @@
                     // Log the user_id to verify that the correct user is being assigned
                     console.log(`UserBot: Vehicle assigned to user_id: ${userId}`);
 
-                    ctx.reply(`Vehicle ${vehicleName} assigned to ${destination} with employee ${username} at ${currentTime}.`, mainKeyboard);
+                    ctx.reply(`Vehicle ${vehicleName} assigned to ${destination} with employee ${username} at ${now}.`, mainKeyboard);
                     ctx.session.vehicleName = null; // Clear the session data
                     ctx.session.username = null; // Clear the session data
 
                     // Notify the admin about the vehicle assignment
                     const adminId = process.env.ADMIN_TELEGRAM_ID;
-                    adminBot.telegram.sendMessage(adminId, `🚗 User ${ctx.from.username || ctx.from.id} has assigned the vehicle "${vehicleName}" to themselves at ${currentTime}.\n\nEmployee: ${username}\nDestination: ${destination}`)
+                    adminBot.telegram.sendMessage(adminId, `🚗 User ${ctx.from.username || ctx.from.id} has assigned the vehicle "${vehicleName}" to themselves at ${now}.\n\nEmployee: ${username}\nDestination: ${destination}`)
                         .then(() => {
                             console.log(`UserBot: Acknowledgment sent to admin_id: ${adminId}`);
                         })

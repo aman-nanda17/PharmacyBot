@@ -1,5 +1,11 @@
     require('dotenv').config();
     const fs = require('fs');
+    const moment = require('moment-timezone');
+    const { Telegraf, Markup } = require('telegraf');
+    const LocalSession = require('telegraf-session-local');
+    const pool = require('./database');
+    const { Keyboard } = require('telegram-keyboard');
+
     // Global error handling to log errors into a file
     process.on('unhandledRejection', (reason, promise) => {
         console.error('AdminBot: Unhandled Rejection at:', promise, 'reason:', reason);
@@ -10,11 +16,6 @@
         console.error('AdminBot: Uncaught Exception:', err);
         fs.appendFileSync('admin_error.log', `Uncaught Exception: ${err}\n`);
     });
-
-    const { Telegraf, Markup } = require('telegraf');
-    const LocalSession = require('telegraf-session-local');
-    const pool = require('./database');
-    const { Keyboard } = require('telegram-keyboard');
 
     const adminBot = new Telegraf(process.env.ADMIN_BOT_TOKEN);
 
@@ -70,8 +71,7 @@
                 const vehicleName = vehicle.name.padEnd(15, ' ');
                 const destination = (vehicle.current_destination || 'pharmacy').padEnd(20, ' ');
                 const user = (vehicle.current_employee || 'Available').padEnd(10, ' ');
-                const assignedAt = vehicle.assigned_at ? new Date(vehicle.assigned_at).toLocaleString() : 'N/A';
-
+                const assignedAt = vehicle.assigned_at ? moment(vehicle.assigned_at).tz('Asia/Kolkata').format('M/D/YYYY, h:mm:ss A') : 'N/A';  
                 if (vehicle.status !== 'pharmacy') {
                     // Highlight the row in red if the vehicle is not in the pharmacy
                     message += `🚗${vehicleName.toUpperCase()} | ${destination.toUpperCase()} | ${user.toUpperCase()} | ${assignedAt}\n`;
@@ -150,22 +150,15 @@
                     const userTelegramId = userResults[0].telegram_id;
     
                     // Calculate time spent
-                    const now = new Date();
-                    const assignedAt = new Date(assigned_at);
-                    const timeDiff = now - assignedAt; // Difference in milliseconds
-    
-                    const hours = Math.floor(timeDiff / (1000 * 60 * 60));
-                    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-                    const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
-    
-                    const totalTime = `${hours}:${minutes}:${seconds}`;
-                    const returnTime = now.toLocaleString(); // Capture the current return time
+                    const now = moment().tz('Asia/Kolkata');  // Capture the current return time
+                    const assignedAtMoment = moment(assigned_at).tz('Asia/Kolkata');
+                    const duration = moment.duration(now.diff(assignedAtMoment));
+
+                    const totalTime = `${duration.hours()}:${duration.minutes()}:${duration.seconds()}`;
+                    const returnTime = now.format('M/D/YYYY, h:mm:ss A');  // Format return time
     
                     // Update the journey details in the journeys table
-                    pool.query(
-                        'UPDATE journeys SET returned_at = ?, total_time = ? WHERE user_id = ? AND vehicle_name = ? AND assigned_at = ?',
-                        [now, totalTime, user_id, vehicleName, assigned_at],
-                        (err) => {
+                    pool.query('UPDATE journeys SET returned_at = ?, total_time = ? WHERE user_id = ? AND vehicle_name = ? AND assigned_at = ?', [now.toDate(), totalTime, user_id, vehicleName, assigned_at], (err) => {
                             if (err) {
                                 console.error('AdminBot: Error updating journey data:', err);
                                 ctx.reply('An error occurred while updating the journey details. Please try again.');
@@ -173,10 +166,7 @@
                                 console.log('AdminBot: Journey details updated successfully.');
     
                                 // Update the vehicle's status back to 'pharmacy'
-                                pool.query(
-                                    'UPDATE vehicles SET status = "pharmacy", current_destination = NULL, current_employee = NULL, user_id = NULL, assigned_at = NULL, returned_at = NULL WHERE name = ?',
-                                    [vehicleName],
-                                    (err, updateResults) => {
+                                pool.query('UPDATE vehicles SET status = "pharmacy", current_destination = NULL, current_employee = NULL, user_id = NULL, assigned_at = NULL, returned_at = NULL WHERE name = ?', [vehicleName], (err, updateResults) => {
                                         if (err) {
                                             console.error('AdminBot: Error updating vehicle status:', err);
                                             ctx.reply('An error occurred while returning the vehicle. Please try again.');
@@ -184,10 +174,10 @@
                                         }
     
                                         if (updateResults.affectedRows > 0) {
-                                            ctx.reply(`🚗 Vehicle ${vehicleName} has been returned to the pharmacy at ${returnTime}. \n\nTime spent: ${hours} hours, ${minutes} minutes, ${seconds} seconds.`);
+                                            ctx.reply(`🚗 Vehicle ${vehicleName} has been returned to the pharmacy at ${returnTime}. \n\nTime spent: ${duration.hours()} hours, ${duration.minutes()} minutes, ${duration.seconds()} seconds.`);
     
                                             // Attempt to send acknowledgment to the user
-                                            userBot.telegram.sendMessage(userTelegramId, `🚗 Your vehicle "${vehicleName}" has been successfully returned to the pharmacy by the admin at ${returnTime}.\n\nEmployee: ${current_employee}\nDestination: ${current_destination}\nTime spent: ${hours} hours, ${minutes} minutes, ${seconds} seconds`)
+                                            userBot.telegram.sendMessage(userTelegramId, `🚗 Your vehicle "${vehicleName}" has been successfully returned to the pharmacy by the admin at ${returnTime}.\n\nEmployee: ${current_employee}\nDestination: ${current_destination}\nTime spent: ${duration.hours()} hours, ${duration.minutes()} minutes, ${duration.seconds()} seconds`)
                                                 .then(() => {
                                                     console.log(`AdminBot: Acknowledgment sent to user_id: ${userTelegramId}`);
                                                 })
@@ -351,10 +341,9 @@
 
         // Update the vehicle with the selected user and destination
         const now = new Date();
-        const currentTime = now.toLocaleString(); // Capture the current time
+        const currentTime = moment(now).tz('Asia/Kolkata').format('M/D/YYYY, h:mm:ss A');  // Use moment for consistent time formatting
 
         pool.query('SELECT id FROM users WHERE telegram_id = ?', [userTelegramId], (err, userResults) => {
-
             if (err) {
                 console.error('AdminBot: Database query error:', err);
                 ctx.reply('A database error occurred. Please try again later.');
@@ -482,14 +471,13 @@
     const [user_id, dayOffset] = ctx.match.slice(1);
 
         // Calculate the date based on the offset (0 = Today, 1 = Yesterday, 2 = Day before Yesterday)
-        const targetDate = new Date();
-        targetDate.setDate(targetDate.getDate() - parseInt(dayOffset));
+        const targetDate = moment().subtract(dayOffset, 'days').format('YYYY-MM-DD');  // Use moment for consistent date handling
 
         // Fetch journey details for the selected date
         pool.query(
             `SELECT vehicle_name, destination, assigned_at, returned_at, total_time 
             FROM journeys
-            WHERE user_id = ? AND DATE(assigned_at) = DATE(?)`,
+            WHERE user_id = ? AND DATE(assigned_at) = ?`,
             [user_id, targetDate],
             (err, journeyResults) => {
                 if (err) throw err;
@@ -499,7 +487,7 @@
                     return;
                 }
 
-                let message = `<b>Journey Details for ${targetDate.toDateString()}:</b>\n\n`;
+                let message = `<b>Journey Details for ${moment(targetDate).format('MMMM Do YYYY')}:</b>\n\n`;
                 message += '<pre>';
                 message += 'Vehicle       | Destination       | Assigned At          | Returned At          | Total Time\n';
                 message += '------------------------------------------------------------------------------------------------\n';
@@ -507,8 +495,8 @@
                 journeyResults.forEach(journey => {
                     const vehicleName = journey.vehicle_name.padEnd(13, ' ');
                     const destination = (journey.destination || 'N/A').padEnd(17, ' ');
-                    const assignedAt = journey.assigned_at ? new Date(journey.assigned_at).toLocaleString() : 'N/A';
-                    const returnedAt = journey.returned_at ? new Date(journey.returned_at).toLocaleString() : 'In Progress';
+                    const assignedAt = journey.assigned_at ? moment(journey.assigned_at).tz('Asia/Kolkata').format('M/D/YYYY, h:mm:ss A') : 'N/A';
+                    const returnedAt = journey.returned_at ? moment(journey.returned_at).tz('Asia/Kolkata').format('M/D/YYYY, h:mm:ss A') : 'In Progress';
                     const totalTime = journey.total_time || 'N/A';
 
                     message += `${vehicleName} | ${destination} | ${assignedAt} | ${returnedAt} | ${totalTime}\n`;
